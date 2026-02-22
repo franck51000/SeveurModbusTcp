@@ -1,0 +1,115 @@
+name: Build and Release APK
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Build Release APK (unsigned)
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Rename APKs
+        run: |
+          mkdir -p artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk artifacts/ModbusTCP-v1-debug.apk
+          cp app/build/outputs/apk/release/app-release-unsigned.apk artifacts/ModbusTCP-v1-release-unsigned.apk
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ModbusTCP-debug-apk
+          path: artifacts/ModbusTCP-v1-debug.apk
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ModbusTCP-release-apk
+          path: artifacts/ModbusTCP-v1-release-unsigned.apk
+
+  release:
+    name: Create GitHub Release v1
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Prepare APK
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk ModbusTCP-v1.apk
+
+      - name: Create Release v1
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1
+          name: "Release v1 – Modbus TCP Client"
+          body: |
+            ## Modbus TCP Client v1.0
+
+            Application Android (API 26+) pour la communication Modbus TCP/IP.
+
+            ### Fonctionnalités
+            - 📡 Connexion Modbus TCP/IP avec indicateur de couleur (vert/rouge)
+            - 📖 Lecture des registres (FC01 à FC04)
+            - ✏️ Écriture des registres (FC05, FC06, FC15, FC16, FC22, FC23)
+            - 🔄 Mode cyclique avec intervalle configurable
+            - 📊 Tableau des valeurs de registres
+            - 🔢 Affichage Décimal / Hexadécimal / Binaire
+            - 📝 Journal de connexion en temps réel
+            - Toutes les fonctions Modbus standard implémentées
+
+            ### Utilisation
+            1. Installer l'APK sur votre appareil Android (API 26+)
+            2. Entrer l'adresse IP, le port (502) et l'ID d'unité du serveur Modbus
+            3. Appuyer sur "Connecter" (bouton rouge → vert une fois connecté)
+            4. Sélectionner le code de fonction Modbus
+            5. Lire ou écrire les registres
+
+            > ℹ️ Cette version est signée en mode debug (non-production).
+          files: ModbusTCP-v1.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

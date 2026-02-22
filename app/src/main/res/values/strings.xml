@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Modbus TCP Client</string>
+    <string name="connection">Connexion</string>
+    <string name="ip_address">Adresse IP</string>
+    <string name="port">Port</string>
+    <string name="unit_id">Unité ID</string>
+    <string name="start_address">Adresse de départ</string>
+    <string name="num_registers">Nombre de registres</string>
+    <string name="register_value">Valeur du registre</string>
+    <string name="btn_connect">Connecter</string>
+    <string name="btn_disconnect">Déconnecter</string>
+    <string name="btn_read">Lire</string>
+    <string name="btn_write">Écrire</string>
+    <string name="status_disconnected">Déconnecté</string>
+    <string name="status_connected">Connecté</string>
+    <string name="status_connecting">Connexion en cours…</string>
+    <string name="function_code">Code de fonction</string>
+    <string name="display_format">Format d\'affichage</string>
+    <string name="cyclic_mode">Mode cyclique</string>
+    <string name="cycle_interval">Intervalle (ms)</string>
+    <string name="log_title">Journal</string>
+    <string name="table_title">Registres</string>
+    <string name="col_address">Adresse</string>
+    <string name="col_value">Valeur</string>
+    <string name="col_hex">Hex</string>
+    <string name="col_bin">Bin</string>
+</resources>

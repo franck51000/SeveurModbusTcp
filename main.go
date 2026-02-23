@@ -2,7 +2,7 @@
 // Simulates a Modbus TCP server on port 502 (configurable).
 // Supports reading and writing Coils, Discrete Inputs, Input Registers and Holding Registers.
 // Interactive CLI allows modifying register values at runtime.
-// Version 2: adds configurable Unit ID parameter (0–255).
+// Version 2: adds configurable Unit ID parameter (0–255) and optional log file (-log).
 package main
 
 import (
@@ -10,6 +10,8 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"net"
 	"os"
 	"strconv"
@@ -40,6 +42,10 @@ var store Store
 // configuredUnitID is the Unit ID this server responds to (0–255).
 // Requests with a different Unit ID are rejected with exception 0x0A.
 var configuredUnitID byte
+
+// logger is the server event logger. It writes to stdout and, when -log is
+// set, simultaneously to the specified log file.
+var logger *log.Logger
 
 // ---------------------------------------------------------------------------
 // Modbus TCP protocol constants
@@ -311,20 +317,46 @@ func handleFC16(pdu []byte) ([]byte, byte) {
 // Connection handler
 // ---------------------------------------------------------------------------
 
+// fcName returns a short human-readable name for a Modbus function code.
+func fcName(fc byte) string {
+	switch fc {
+	case fcReadCoils:
+		return "Read Coils (FC01)"
+	case fcReadDiscreteInputs:
+		return "Read Discrete Inputs (FC02)"
+	case fcReadHoldingRegisters:
+		return "Read Holding Registers (FC03)"
+	case fcReadInputRegisters:
+		return "Read Input Registers (FC04)"
+	case fcWriteSingleCoil:
+		return "Write Single Coil (FC05)"
+	case fcWriteSingleRegister:
+		return "Write Single Register (FC06)"
+	case fcWriteMultipleCoils:
+		return "Write Multiple Coils (FC0F)"
+	case fcWriteMultipleRegisters:
+		return "Write Multiple Registers (FC10)"
+	default:
+		return fmt.Sprintf("Unknown (FC%02X)", fc)
+	}
+}
+
 func handleConn(conn net.Conn) {
 	defer conn.Close()
 	remote := conn.RemoteAddr().String()
-	fmt.Printf("[+] Connexion: %s\n", remote)
+	logger.Printf("[+] Connexion: %s\n", remote)
 	for {
 		txID, unitID, pdu, err := readRequest(conn)
 		if err != nil {
-			fmt.Printf("[-] Déconnexion: %s (%v)\n", remote, err)
+			logger.Printf("[-] Déconnexion: %s (%v)\n", remote, err)
 			return
 		}
 		// Reject requests addressed to a different Unit ID (0xFF is accepted as
 		// a wildcard used by some Modbus TCP masters for direct connections).
 		if unitID != configuredUnitID && unitID != 0xFF {
 			if len(pdu) > 0 {
+				logger.Printf("[!] Requête ignorée depuis %s: Unit ID %d inattendu (attendu %d), FC=%s\n",
+					remote, unitID, configuredUnitID, fcName(pdu[0]))
 				sendException(conn, txID, unitID, pdu[0], 0x0A) // Gateway Path Unavailable
 			}
 			continue
@@ -334,6 +366,8 @@ func handleConn(conn net.Conn) {
 			continue
 		}
 		fc := pdu[0]
+		logger.Printf("[>] Requête depuis %s: TxID=%d, UnitID=%d, %s\n",
+			remote, txID, unitID, fcName(fc))
 		var (
 			resp   []byte
 			exCode byte
@@ -359,6 +393,7 @@ func handleConn(conn net.Conn) {
 			exCode = 0x01 // illegal function
 		}
 		if exCode != 0 {
+			logger.Printf("[!] Exception depuis %s: FC=%s, code=0x%02X\n", remote, fcName(fc), exCode)
 			sendException(conn, txID, unitID, fc, exCode)
 		} else {
 			sendResponse(conn, txID, unitID, resp)
@@ -576,6 +611,7 @@ func runCLI(done chan struct{}) {
 func main() {
 	portFlag := flag.Int("port", 502, "Port TCP d'écoute (0–65535)")
 	unitIDFlag := flag.Int("unit-id", 1, "Unit ID Modbus (0–255)")
+	logFlag := flag.String("log", "", "Fichier de log (ex: serveur.log). Vide = pas de fichier, affichage console uniquement.")
 	flag.Parse()
 
 	if *portFlag < 0 || *portFlag > 65535 {
@@ -586,6 +622,19 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Erreur: le Unit ID doit être compris entre 0 et 255")
 		os.Exit(1)
 	}
+
+	// Initialise logger: always write to stdout; also write to file when -log is set.
+	logWriter := io.Writer(os.Stdout)
+	if *logFlag != "" {
+		f, err := os.OpenFile(*logFlag, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Erreur: impossible d'ouvrir le fichier de log %q: %v\n", *logFlag, err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		logWriter = io.MultiWriter(os.Stdout, f)
+	}
+	logger = log.New(logWriter, "", log.LstdFlags)
 
 	configuredUnitID = byte(*unitIDFlag)
 	port := strconv.Itoa(*portFlag)
@@ -598,9 +647,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "         Utilisez: sudo ./serveur-modbus-tcp-v2  ou  ./serveur-modbus-tcp-v2 -port 5020\n")
 		os.Exit(1)
 	}
-	fmt.Println("ServeurModbusTcp — Version 2")
-	fmt.Printf("Serveur Modbus TCP démarré sur %s\n", addr)
-	fmt.Printf("Unit ID: %d\n", configuredUnitID)
+	logger.Println("ServeurModbusTcp — Version 2")
+	logger.Printf("Serveur Modbus TCP démarré sur %s\n", addr)
+	logger.Printf("Unit ID: %d\n", configuredUnitID)
+	if *logFlag != "" {
+		logger.Printf("Logs enregistrés dans: %s\n", *logFlag)
+	}
 
 	done := make(chan struct{})
 
@@ -613,7 +665,7 @@ func main() {
 				case <-done:
 					return
 				default:
-					fmt.Printf("Erreur accept: %v\n", err)
+					logger.Printf("Erreur accept: %v\n", err)
 					continue
 				}
 			}

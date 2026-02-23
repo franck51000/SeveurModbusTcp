@@ -8,7 +8,9 @@ Utilitaire Modbus TCP en mode serveur — simule un serveur Modbus TCP sur le po
   Le serveur répond uniquement aux requêtes Modbus adressées à cet identifiant.  
   Les requêtes avec un Unit ID différent reçoivent l'exception Modbus `0x0A` (Gateway Path Unavailable).  
   La valeur `0xFF` est également acceptée (wildcard Modbus TCP standard).
-- Tous les paramètres sont désormais passés sous forme de **flags** nommés (`-port`, `-unit-id`).
+- Ajout du paramètre **Log** (`-log <fichier>`).  
+  Enregistre tous les événements du serveur (connexions, déconnexions, requêtes Modbus, erreurs) dans un fichier horodaté, en plus de l'affichage console.
+- Tous les paramètres sont désormais passés sous forme de **flags** nommés (`-port`, `-unit-id`, `-log`).
 
 ## Téléchargement (Windows 10/11, 64-bit)
 
@@ -39,6 +41,11 @@ sudo ./serveur-modbus-tcp-v2                        # port 502, Unit ID 1
 ./serveur-modbus-tcp-v2 -port 5020 -unit-id 10      # port et Unit ID personnalisés
 ```
 
+**Windows — avec enregistrement des logs :**
+```
+serveur-modbus-tcp-v2.exe -port 5020 -unit-id 10 -log serveur.log
+```
+
 **Afficher l'aide :**
 ```
 serveur-modbus-tcp-v2.exe -help
@@ -52,6 +59,7 @@ serveur-modbus-tcp-v2.exe -help
 |---|---|---|
 | `-port <n>` | `502` | Port TCP d'écoute (0–65535) |
 | `-unit-id <n>` | `1` | Unit ID Modbus (0–255) |
+| `-log <fichier>` | *(aucun)* | Chemin du fichier de log (ex: `serveur.log`). Si omis, les logs s'affichent uniquement en console. |
 
 ### Interface de commandes interactive
 
@@ -77,9 +85,10 @@ Une fois le serveur lancé, les commandes suivantes sont disponibles :
 ### Exemple
 
 ```
-ServeurModbusTcp — Version 2
-Serveur Modbus TCP démarré sur 0.0.0.0:5020
-Unit ID: 10
+2026/02/23 13:05:00 ServeurModbusTcp — Version 2
+2026/02/23 13:05:00 Serveur Modbus TCP démarré sur 0.0.0.0:5020
+2026/02/23 13:05:00 Unit ID: 10
+2026/02/23 13:05:00 Logs enregistrés dans: serveur.log
 
 > set hr 0 1234
 HR[0] = 1234 (0x04D2)
@@ -98,6 +107,27 @@ CO[0] = 1
 > quit
 Arrêt du serveur...
 ```
+
+## Format des logs
+
+Chaque entrée est horodatée automatiquement. Exemple de fichier `serveur.log` :
+
+```
+2026/02/23 13:05:00 ServeurModbusTcp — Version 2
+2026/02/23 13:05:00 Serveur Modbus TCP démarré sur 0.0.0.0:5020
+2026/02/23 13:05:00 Unit ID: 10
+2026/02/23 13:05:00 Logs enregistrés dans: serveur.log
+2026/02/23 13:05:12 [+] Connexion: 192.168.1.50:49200
+2026/02/23 13:05:12 [>] Requête depuis 192.168.1.50:49200: TxID=1, UnitID=10, Read Holding Registers (FC03)
+2026/02/23 13:05:12 [>] Requête depuis 192.168.1.50:49200: TxID=2, UnitID=10, Write Single Register (FC06)
+2026/02/23 13:05:15 [-] Déconnexion: 192.168.1.50:49200 (EOF)
+```
+
+Les préfixes utilisés sont :
+- `[+]` — nouvelle connexion
+- `[-]` — déconnexion
+- `[>]` — requête Modbus reçue
+- `[!]` — erreur ou requête rejetée (Unit ID incorrect, exception Modbus)
 
 ## Codes de fonction Modbus supportés
 
